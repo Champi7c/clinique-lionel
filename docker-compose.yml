@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # ── Frontend React (Nginx) ─────────────────────────────────────
+  frontend:
+    build:
+      context: ./clinique-lionel
+      args:
+        VITE_API_URL: ${VITE_API_URL:-https://cml-sst.com:3451/api}
+    container_name: cml_frontend
+    ports:
+      - "3450:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - cml_network
+
+  # ── Backend Laravel API (PHP-FPM + Nginx) ──────────────────────
+  backend:
+    build:
+      context: ./clinique-lionel-api
+    container_name: cml_backend
+    ports:
+      - "3451:80"
+    environment:
+      APP_NAME: "Cabinet Medical Lionel"
+      APP_ENV: production
+      APP_KEY: ${APP_KEY}
+      APP_DEBUG: "false"
+      APP_URL: ${APP_URL:-https://cml-sst.com:3451}
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: clinique_lionel
+      DB_USERNAME: clinique
+      DB_PASSWORD: ${DB_PASSWORD:-cml_secret_2024}
+      SESSION_DRIVER: file
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+      FILESYSTEM_DISK: local
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - backend_storage:/var/www/html/storage/app
+      - backend_logs:/var/www/html/storage/logs
+    restart: unless-stopped
+    networks:
+      - cml_network
+
+  # ── MySQL ──────────────────────────────────────────────────────
+  db:
+    image: mysql:8.0
+    container_name: cml_db
+    ports:
+      - "3452:3306"
+    environment:
+      MYSQL_DATABASE: clinique_lionel
+      MYSQL_USER: clinique
+      MYSQL_PASSWORD: ${DB_PASSWORD:-cml_secret_2024}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-cml_root_2024}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "clinique", "--password=cml_secret_2024"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - cml_network
+
+volumes:
+  mysql_data:
+  backend_storage:
+  backend_logs:
+
+networks:
+  cml_network:
+    driver: bridge
